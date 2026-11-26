@@ -77,6 +77,10 @@ dialog::backdrop{background:rgba(10,30,50,.45)}
 #cv{width:100%;height:auto;border:1px dashed var(--pri);border-radius:8px;background:#fff;touch-action:none;cursor:crosshair}
 .dbt{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 @media print{#paper .sg td{height:78px}#paper .sg img{max-height:48px;max-width:110px;display:block;margin:0 auto 2px}}
+.hr{border-bottom:1px solid var(--line)}.hr summary{cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0}
+.chk{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:2px 12px;padding:4px 0 12px}
+.chk label{display:flex;gap:7px;align-items:center;font-weight:400;font-size:14px;color:var(--ink);margin:0;min-height:32px;cursor:pointer}
+.chk .all{grid-column:1/-1;font-weight:700;color:var(--pri)}.chk input{width:18px;height:18px}
 </style></head><body>
 <header><h1>Laporan Pergantian Shift</h1><p>Stasiun Geofisika Kelas II Kepahiang – BMKG</p></header>
 <nav><a href="#s1">1. Serah terima</a><a href="#s2">2. Pemeriksaan peralatan</a><a href="#s3">3. Hasil observasi</a><span class="sp"></span><span id="syncSt" class="lg" style="margin:0 8px"></span> <button class="b o s" id="btnSync">Sinkron</button> <button class="b o s" id="btnReset">Kosongkan form</button> <button class="b s" id="btnPrint">Cetak / simpan PDF</button></nav>
@@ -155,10 +159,16 @@ EQ.forEach(([g,items])=>{rows+=`<tr><td class="grp" colspan="3">${g}</td></tr>`;
 $("#eq tbody").innerHTML=rows;
 
 // Site off
-function siteSel(h){return `<select data-h="${h}" aria-label="Tambah site off jam ke-${h}"><option value="">+ pilih site off</option>${SITES.map(s=>`<option value="${s[0]}">${s[0]} – ${s[1]}</option>`).join("")}</select>`}
-function renderOff(){$("#off").innerHTML=[...Array(12)].map((_,i)=>{const h=i+1,l=ST.off[h]||[];return `<div class="hour"><b>Jam ke-${h}</b><div>${siteSel(h)}<div class="chips">${l.map(c=>`<span class="chip">${c}<button type="button" data-h="${h}" data-c="${c}" aria-label="Hapus ${c}">×</button></span>`).join("")}</div></div></div>`}).join("");updStat()}
-$("#off").addEventListener("change",e=>{const h=e.target.dataset.h;if(!h||!e.target.value)return;(ST.off[h]=ST.off[h]||[]);const c=e.target.value;if(!ST.off[h].includes(c)){ST.off[h].push(c);put(`off/${h}/${c}`,true)}renderOff();save()});
-$("#off").addEventListener("click",e=>{const b=e.target.closest("button[data-c]");if(!b)return;ST.off[b.dataset.h]=ST.off[b.dataset.h].filter(c=>c!==b.dataset.c);put(`off/${b.dataset.h}/${b.dataset.c}`,null);renderOff();save()});
+const OPENH=new Set();
+function sumHTML(h){const l=ST.off[h]||[];return `<b style="min-width:62px">Jam ke-${h}</b><span class="badge ${l.length?"bad":"ok"}">${l.length?l.length+" site off":"semua normal"}</span><span class="lg" style="margin:0">${l.join(", ")}</span>`}
+function hourHTML(h){const l=ST.off[h]||[];return `<details class="hr" data-hd="${h}"${OPENH.has(h)?" open":""}><summary>${sumHTML(h)}</summary><div class="chk"><label class="all"><input type="checkbox" data-all="${h}"${l.length===SITES.length?" checked":""}> Pilih semua site off jam ini</label>${SITES.map(x=>`<label><input type="checkbox" data-h="${h}" data-c="${x[0]}"${l.includes(x[0])?" checked":""}> <b>${x[0]}</b> <small style="color:var(--mut)">${x[1]}</small></label>`).join("")}</div></details>`}
+function renderOff(){$("#off").innerHTML=[...Array(12)].map((_,i)=>hourHTML(i+1)).join("");document.querySelectorAll("#off [data-all]").forEach(x=>{const n=(ST.off[x.dataset.all]||[]).length;x.indeterminate=n>0&&n<SITES.length});updStat()}
+function updHour(h){const d=document.querySelector(`[data-hd="${h}"]`);if(!d)return;const l=ST.off[h]||[];d.querySelectorAll("input[data-c]").forEach(x=>x.checked=l.includes(x.dataset.c));const a=d.querySelector("[data-all]");a.checked=l.length===SITES.length;a.indeterminate=l.length>0&&l.length<SITES.length;d.querySelector("summary").innerHTML=sumHTML(h)}
+$("#off").addEventListener("toggle",e=>{const h=+e.target.dataset.hd;if(h)e.target.open?OPENH.add(h):OPENH.delete(h)},true);
+$("#off").addEventListener("change",e=>{const t=e.target;const h=+(t.dataset.all||t.dataset.h);if(!h)return;
+ if(t.dataset.all){ST.off[h]=t.checked?SITES.map(x=>x[0]).sort():[];put(`off/${h}`,t.checked?Object.fromEntries(ST.off[h].map(c=>[c,true])):null)}
+ else{const l=new Set(ST.off[h]||[]);t.checked?l.add(t.dataset.c):l.delete(t.dataset.c);ST.off[h]=[...l].sort();put(`off/${h}/${t.dataset.c}`,t.checked?true:null)}
+ updHour(h);updStat();save()});
 
 function updStat(){const bad=document.querySelector('#eq input[value=Gangguan]:checked')||Object.values(ST.off).some(a=>a.length);
  $("#autoStat").innerHTML=bad?'<span class="badge bad">terdeteksi gangguan / site off</span>':'<span class="badge ok">semua normal</span>';
